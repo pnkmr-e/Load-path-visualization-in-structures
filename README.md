@@ -1,7 +1,7 @@
 # Load-path-visualization-in-structures
-This depository contains the scripts developed as part of my master thesis project titled "Load Path Visualization in Engine Structures". The current work utilizes the U* index to determine load paths in structures.
+This depository contains the scripts and supporting files developed as part of my master thesis project titled "Load Path Visualization in Engine Structures". The current work utilizes the U* index to determine load paths in structures.
 
-The description for the Mechanical APDL input files, MATLAB and Python scripts are provided below in this table.
+The description for the Mechanical APDL input files, MATLAB and Python scripts are provided below in this table. Sample mesh files for a simple plate with hole structure are also provided to run the input files.
 
 | Sl.No. |     FileName     |  Language | Description |
 | :----: | ---------------- | :-------: | ----------- |
