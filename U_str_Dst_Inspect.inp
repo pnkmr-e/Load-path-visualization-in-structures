@@ -1,0 +1,343 @@
+/NOPR   ! Suppress printing of UNDO process 
+/PMACRO ! Echo following commands to log    
+FINISH  ! Make sure we are at BEGIN level   
+/CLEAR,NOSTART  ! Clear model since no SAVE found  
+
+!/FILNAME,Plate_with_Hole_Dist_Insp,0 
+!/CWD,'P:\nobackup\KBEIMP\Ram&Santhosh\Plate_With_Hole\APDL_trials\Trial13_Inspect2' 
+/TITLE,Plate_with_Hole_Dist_Insp
+
+CDREAD,DB, Plate_with_Hole_distributed, cdb
+DOF_PER_NODE = 2    ! 2D problem
+/REPLOT
+
+!--------------------------------------------------------------------------------
+
+! DEFINE NODE SETS
+NSEL, ALL
+CM, TOTNODES, NODE
+NSEL, U,,, FIXNODES
+NSEL, U,,, LOADNODES
+CM, FREENODES, NODE   
+
+!--------------------------------------------------------------------------------
+
+! GET THE NODE COUNTS
+NSEL, S,,, FIXNODES
+*GET, NUM_FIX_NODES, NODE, 0, COUNT
+NSEL,S,,, LOADNODES
+*GET, NUM_LOAD_NODES, NODE, 0, COUNT
+NSEL,S,,, FREENODES
+*GET, NUM_FREE_NODES, NODE, 0, COUNT
+NSEL,S,,, TOTNODES
+*GET, NUM_TOT_NODES, NODE, 0, COUNT
+
+!--------------------------------------------------------------------------------
+
+! EXTRACT NODE NUMBERS IN A VECTOR
+NSEL, S,,, FIXNODES
+*VGET, FIX_NODES_LIST, NODE, 0 ,NLIST
+NSEL,S,,, LOADNODES
+*VGET, LOAD_NODES_LIST, NODE, 0 ,NLIST
+NSEL,S,,, FREENODES
+*VGET, FREE_NODES_LIST, NODE, 0 ,NLIST
+
+!--------------- Apply original boundary conditions ----------------
+
+/PREP7  		! Enter the preprocessor
+ALLSEL
+D,FIXNODES,ALL,ALL                         ! All dofs of the fix nodes to zero
+F,LOADNODES,FX,10000
+
+!---------------------- Solve the problem ----------------------
+/SOLU			! Enter the solution
+SOLVE
+
+!---------------------- Calculate the strain Energy ----------------------
+
+/POST1
+SET,
+/POST26
+ENERSOL,2,SENE,,STRAINENERGY
+
+!kommer från Time history variables 
+
+FILE,'Plate_with_Hole_Dist_Insp','rst','.'   !kan nog behöva ändra här
+/UI,COLL,1  
+NUMVAR,200  
+SOLU,191,NCMIT  
+STORE,MERGE 
+FILLDATA,191,,,,1,1 
+REALVAR,191,191 
+
+*GET,U_VALUE,VARI,2, REAL,1  ! Store the Strain energy value
+
+!Exporting U-value
+*cfopen,U_value.csv
+*VWRITE,U_VALUE
+(F15.13)
+*cfclose
+!--------------STORING THE DISPALECMENT d_a AND d_c------------------
+
+*DIM, LOADNODE_DISP,ARRAY,NUM_LOAD_NODES,2  
+*DO, I, 1,NUM_LOAD_NODES
+    	*GET,LOADNODE_DISP(I,1),NODE,LOAD_NODES_LIST(I),U,X
+    	*GET,LOADNODE_DISP(I,2),NODE,LOAD_NODES_LIST(I),U,Y
+*ENDDO
+
+*DIM, FREENODE_DISP,ARRAY,NUM_FREE_NODES,2  
+*DO, I, 1,NUM_FREE_NODES
+    	*GET,FREENODE_DISP(I,1),NODE,FREE_NODES_LIST(I),U,X
+    	*GET,FREENODE_DISP(I,2),NODE,FREE_NODES_LIST(I),U,Y
+*ENDDO
+
+*MWRITE,LOADNODE_DISP,A_da.csv                  ! COMMA ISSUE RESOLVED 
+(F18.14,F18.14)
+
+*MWRITE,FREENODE_DISP,A_dc.csv                  ! COMMA ISSUE RESOLVED 
+(F18.14,F18.14)	
+
+!---------------------- Do the looping ----------------------
+/PREP7 ! Enter the processorer
+
+!Fixing the loading point and and supporting points  
+ALLSEL
+FDELE,ALL
+D,FIXNODES,ALL,ALL
+D,LOADNODES,ALL,ALL
+
+
+*DO,I,1,NUM_FREE_NODES*2
+	ALLSEL
+	*IF,I,LE,NUM_FREE_NODES,THEN
+		F,FREE_NODES_LIST(I),FX,-15000!  
+		F,FREE_NODES_LIST(I),FY,-20000! 
+	*ELSEIF,I,GT,NUM_FREE_NODES 		 
+		F,FREE_NODES_LIST(I-NUM_FREE_NODES),FX,-17500! 
+		F,FREE_NODES_LIST(I-NUM_FREE_NODES),FY,-22500!  
+	*ENDIF
+	 
+    ALLSEL
+    LSWRITE,I       					! Write loadstep
+    FDELE,ALL !DELETING ALL FORCES FOR NEW LOOP
+*ENDDO
+
+
+!-------------------- SOLVE ALL THE SETS -------------------------
+/SOLU
+ALLSEL
+LSSOLVE,1,NUM_FREE_NODES*2 !solving each load step
+
+!-------------------- CALCULATE STRAIN ENERGY FOR ALL SET -----------------------
+!DET ÄR HÄR JAG VÄLJER REAKTIONKRAFTERNA
+
+
+/post1
+SET,
+*DIM, DC,ARRAY,NUM_FREE_NODES,4
+*DO,I,1,NUM_FREE_NODES*2
+	
+	*IF,I,LE,NUM_FREE_NODES,THEN
+		SET,,, ,,, ,I	
+    	*GET,DC(I,1),NODE,FREE_NODES_LIST(I),U,X
+   		*GET,DC(I,2),NODE,FREE_NODES_LIST(I),U,Y	
+	*ELSEIF,I,GT,NUM_FREE_NODES
+		SET,,, ,,, ,I	
+    	*GET,DC(I-NUM_FREE_NODES,3),NODE,FREE_NODES_LIST(I-NUM_FREE_NODES),U,X
+   		*GET,DC(I-NUM_FREE_NODES,4),NODE,FREE_NODES_LIST(I-NUM_FREE_NODES),U,Y
+	*ENDIF
+	
+*ENDDO
+
+*MWRITE,DC,AA_DC.csv                  ! COMMA ISSUE RESOLVED 
+(F18.14,F18.14,F18.14,F18.14)
+
+!--------------------------------------------------------------------------------
+
+/POST26
+!!!!!!!!!!!!!Samma problem som för 2 dof kan inte byta namn i varje loop 
+!när jag exporterar datan
+FILE,'Plate_with_Hole_Dist_Insp','rst','.'   
+/UI,COLL,1  
+NUMVAR,200  
+SOLU,191,NCMIT  
+STORE,MERGE 
+FILLDATA,191,,,,1,1 
+REALVAR,191,191 
+
+
+! -------------- EXTRACTING REACTION FORCES at node set 'A' --------------
+
+! Extract x component of reaction forces 
+*DIM,RF_X,ARRAY,NUM_FREE_NODES*DOF_PER_NODE,NUM_LOAD_NODES
+
+*DO,I,1,NUM_LOAD_NODES
+
+    RFORCE,2,LOAD_NODES_LIST(I),F,X,FX_2
+    STORE,MERGE
+    
+    VGET,RF_X(1,I),2
+
+*ENDDO
+
+
+! Extract y component of reaction forces 
+*DIM,RF_Y,ARRAY,NUM_FREE_NODES*DOF_PER_NODE,NUM_LOAD_NODES
+
+*DO,I,1,NUM_LOAD_NODES
+
+    RFORCE,3,LOAD_NODES_LIST(I),F,Y,FY_3
+    STORE,MERGE
+
+    VGET,RF_Y(1,I),3
+
+*ENDDO
+
+! ------------------------------------------------------------------------
+
+*MWRITE,FREE_NODES_LIST,A_freenode_number,txt	!!! REQUIRED FOR U* COMPUTATION IN MATLAB
+(F10.0)
+
+
+! ------------------------- PRINT REACTION FORCES ------------------------
+
+! Save time history variables to file
+*MWRITE,RF_X,A_reaction_x,txt
+(F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4)
+
+! Save time history variables to file
+*MWRITE,RF_Y,A_reaction_y,txt
+(F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4,F15.4)
+
+
+!---------------------------- DATA PROCESSING ----------------------------
+
+
+ALLSEL
+*GET,ELEM_NO_MIN,ELEM,0,NUM,MIN
+*GET,ELEM_NO_MAX,ELEM,0,NUM,MAX
+*GET,ELEM_COUNT,ELEM,0,COUNT
+
+
+!!! --- MISSING VARIABLE --- !!!
+!NODES_PER_ELEMENT = 4
+!!!! ------------------------ !!!
+!*DIM,ELEMENT_TABLE,ARRAY,ELEM_COUNT,1+NODES_PER_ELEMENT ! 4 NODES
+!*DO,I,ELEM_NO_MIN,ELEM_NO_MAX
+!	*SET,ELEMENT_TABLE(I,1),I
+!	*DO,J,1,NODES_PER_ELEMENT 
+!		*SET,ELEMENT_TABLE(I,J+1),NELEM(I,J)
+!	*ENDDO
+!*ENDDO
+
+! ------------------------- COMPUTING U_STAR --------------------------
+
+*DIM,U_STAR,ARRAY,NUM_TOT_NODES,2
+
+
+! assign node numbers
+*DO,I,1,NUM_TOT_NODES
+	*SET,U_STAR(I,1),I
+*ENDDO
+
+
+! assign U*=1 for load nodes
+*DO,I,1,NUM_LOAD_NODES
+	*SET,U_STAR(LOAD_NODES_LIST(I),2),1
+*ENDDO
+
+
+! assign U*=0 for fixed nodes
+*DO,I,1,NUM_FIX_NODES
+	*SET,U_STAR(FIX_NODES_LIST(I),2),0
+*ENDDO
+
+
+*DIM,LOADNODE_DISP_VEC,ARRAY,1,2*NUM_LOAD_NODES
+*DO,I,1,NUM_LOAD_NODES
+    *SET,LOADNODE_DISP_VEC(1,2*I-1),LOADNODE_DISP(I,1)
+    *SET,LOADNODE_DISP_VEC(1,2*I)  ,LOADNODE_DISP(I,2)
+*ENDDO
+
+*DIM,PA,ARRAY,2*NUM_LOAD_NODES,2
+*DIM,DC_EACH_FREE_NODE,ARRAY,2,2
+*DIM,FREENODE_DISP_EACH_NODE,ARRAY,2,1    
+
+*DO,I,1,NUM_FREE_NODES
+    
+    *DO,J,1,NUM_LOAD_NODES
+        
+        ! 1st load step for each node
+        *SET,PA(2*J-1,1),RF_X(I,J)
+        *SET,PA(2*J,1)  ,RF_Y(I,J)
+
+        ! 2nd load step for each node
+        *SET,PA(2*J-1,2),RF_X(NUM_FREE_NODES+I,J)
+        *SET,PA(2*J,2)  ,RF_Y(NUM_FREE_NODES+I,J)
+
+    *ENDDO
+
+    *SET,DC_EACH_FREE_NODE(1,1),DC(I,1)
+    *SET,DC_EACH_FREE_NODE(1,2),DC(I,3)
+    *SET,DC_EACH_FREE_NODE(2,1),DC(I,2)
+    *SET,DC_EACH_FREE_NODE(2,2),DC(I,4)
+
+    *MOPER,INVDC,DC_EACH_FREE_NODE,INVERT
+    *MOPER,K_AC,PA,MULT,INVDC
+
+    *SET,FREENODE_DISP_EACH_NODE(1,1),FREENODE_DISP(I,1)
+    *SET,FREENODE_DISP_EACH_NODE(2,1),FREENODE_DISP(I,2)
+
+    *MOPER,PROD1,K_AC,MULT,FREENODE_DISP_EACH_NODE
+    *MOPER,DENOM,LOADNODE_DISP_VEC,MULT,PROD1
+	*SET,DVAR1,DENOM(1,1)
+
+    *SET,U_STAR(FREE_NODES_LIST(I),2),1/(1 - 2*U_VALUE/DVAR1)
+
+*ENDDO
+
+STATUS, U_STAR
+
+SAVE			! SAVES DATABASE TO JOBNAME.DB
+
+
+!-------------------- EXPORTING DATA ---------------------
+*cfopen,element_type.txt
+! list element types
+*GET,net,ETYP,1,NUM,COUNT
+*DO,i,1,net
+	*GET,ETname,ETYP,i,ATTR,ENAM
+*VWRITE,'ET ',i,' ',ETname
+(A3, F4.0, A1, F4.0)
+*ENDDO
+*cfclose
+
+!*MWRITE,ELEMENT_TABLE,ELEMENT_CONNECTIVITY,txt
+!(F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0,F10.0)
+
+*MWRITE,U_STAR,U_STAR,txt
+(F10.0,F10.6,F10.6,F10.6,F10.6)
+!6 digit precision. if you want more precision, increase'x' in F10.x
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! format output for nodes, elements and stress listings
+/PAGE, 1E9,, 1E9,,  ! disable headers
+/FORMAT, , ,14,5, , ! fix floating point format
+/HEADER, off, off, off, off, on, off ! disable summaries
+
+/POST26
+/OUTPUT,NLIST,txt
+NLIST,,,,COORD		! print nodes w. coordinates
+/OUTPUT
+
+/OUTPUT,ELIST,txt
+ELIST				! print element connectivity table
+/OUTPUT
+
+
+!/POST1
+!/OUTPUT,DISP,txt
+!PRNSOL,U			! print all displacements
+!/OUTPUT

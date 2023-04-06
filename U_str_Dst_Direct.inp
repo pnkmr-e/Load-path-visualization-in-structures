@@ -1,0 +1,292 @@
+
+
+!---------------------------------------------------------------------------------
+
+!---------------------------------START-------------------------------------------
+
+/NOPR   ! Suppress printing of UNDO process 
+/PMACRO ! Echo following commands to log    
+FINISH  ! Make sure we are at BEGIN level   
+/CLEAR,NOSTART  ! Clear model since no SAVE found  
+
+!/FILNAME,Plate_with_Hole_distributed,0 
+!/CWD,'P:\nobackup\KBEIMP\Ram&Santhosh\Plate_With_Hole\APDL_trials\Trial11_ustar_distributed' 
+!/TITLE,Plate_with_Hole_distributed
+
+
+CDREAD,DB, Plate_with_Hole_distributed, cdb
+/REPLOT
+
+!-----------------------Extact node numbers------------------------------
+
+NSEL, ALL
+CM, TOTNODES , node
+NSEL, U,,, FIXNODES
+NPLOT
+NSEL,U,,,LOADNODES
+NPLOT
+CM,FREENODES, node
+NPLOT
+
+!-----------------------------COUNT AND EXTRANCT NODE NUMBERS-----------------------------------
+
+NSEL, S,,, FIXNODES
+*GET, NUM_FIX_NODES ,NODE, 0 ,COUNT
+
+
+NSEL,S,,,LOADNODES
+*GET, NUM_LOAD_NODES ,NODE, 0 ,COUNT
+
+
+NSEL,S,,, FREENODES
+*GET, NUM_FREE_NODES ,NODE, 0 ,COUNT
+
+NSEL,S,,, TOTNODES
+*GET, NUM_TOT_NODES ,NODE, 0 ,COUNT
+
+!*STATUS, NUM_FIX_NODES
+
+!-------------------- NODE NUMBERS-----------------------------------------
+NSEL, S,,, FIXNODES
+*VGET, FIX_NODES_LIST , NODE, 0 , NLIST
+
+NSEL,S,,,LOADNODES
+*VGET, LOAD_NODES_LIST , NODE, 0 , NLIST
+
+NSEL,S,,, FREENODES
+*VGET, FREE_NODES_LIST , NODE, 0 , NLIST
+
+!--------------------BOUNDARY CONDITION---------------------------
+
+
+NSEL,S,,,FREENODES
+NPLOT
+*GET, MIN_NODE_NO, NODE, 0,NUM, MIN
+
+! Define an array of dimansion 2xnumber of free nodes
+
+*DIM, L_NODES_1C, ARRAY, 2, NUM_FREE_NODES    
+
+
+/PREP7
+ALLSEL
+D, FIXNODES, ALL, ALL
+F, LOADNODES,Fx,10000
+
+/SOLU
+SOLVE
+
+!--------------------------------POST PROCESS------------------------------
+
+/POST1
+SET,
+/POST26
+
+ENERSOL,2,SENE,,ENERGYDENSITY
+
+FILE,'Plate_with_Hole_distributed','rst','.'
+/UI,COLL,1
+NUMVAR,200
+SOLU,191,NCMIT
+STORE,MERGE
+FILLDATA,191,,,,1,1
+REALVAR,191,191
+
+*GET, U_REAL,VARI, 2, REAL, 1 ! Store Strain energy value (VERIFIED)
+
+! ------------ CALCUALTE THE NODE DISPLACEMENT----------------
+
+*DIM, LOADNODE_DISP, ARRAY, 2, NUM_LOAD_NODES 
+
+!---------------------------------------------------------------------
+
+	*DO, I, 1, NUM_LOAD_NODES
+		*GET, LOADNODE_DISP(1,I), NODE, LOAD_NODES_LIST(I),U,X
+		*GET, LOADNODE_DISP(2,I), NODE, LOAD_NODES_LIST(I),U,Y
+	*ENDDO
+
+!---------------------------------------------------------------------
+
+
+
+
+! ------------------------- LOOPING ----------------------------- 
+
+/PREP7
+
+*DO, I, 1, NUM_FREE_NODES
+	DDELE,ALL
+		FDELE, ALL
+	ALLSEL
+! APPLY NORMAL BOUNDARY CONDITION
+D,FIXNODES,ALL,ALL
+! ASSIGN ENFORCED DISPLACEMENT
+
+*DO, J, 1, NUM_LOAD_NODES
+	D, LOAD_NODES_LIST(J),UX, LOADNODE_DISP(1,J)
+	D, LOAD_NODES_LIST(J),UY, LOADNODE_DISP(2,J)
+*ENDDO
+
+NSEL,S,,,FREENODES
+
+L_NODES_1C(1,I)=MIN_NODE_NO
+MIN_NODE_NO=NDNEXT(MIN_NODE_NO)
+D,L_NODES_1C(1,I),ALL,ALL
+ALLSEL
+LSWRITE,I
+DDELE,ALL
+*ENDDO
+DDELE,ALL
+
+!--------------- SOLVE ALL THE SETS -------------------- ONE SAVE 
+
+!*GET, TimeBEFORE,ACTIVE,,TIME,CPU
+/SOLU
+ALLSEL
+LSSOLVE,1, NUM_FREE_NODES
+!*GET, TimeAFTER, ACTIVE,, TIME,CPU
+!SOLUTION_TIME = (TimeAFTER-TimeBEFORE)
+!CPU TIME
+
+
+!----------- CALCULATE THE STRAIN ENERGY FOR ALL SET-----------
+
+/POST26
+/OUTPUT, energy_list,txt
+ENERSOL,3,SENE,,U_PRIME
+!PRVAR,3
+/OUTPUT
+
+!------------------ ASSIGN U* VALUES TO THE NODES------------------------ (Here)
+FILE,'Plate_with_Hole_distributed','rst','.'
+/UI, COLL,1
+NUMVAR,200
+SOLU,191,NCMIT
+STORE, MERGE
+FILLDATA,191,,,,1,1
+REALVAR,191,191
+
+*DO,J,1,NUM_FREE_NODES ! U PRIME VALUES FOR THE FREENODES
+*GET, L_NODES_1C(2,J), VARI,3, REAL,J
+*ENDDO
+
+*DIM, U_STAR, ARRAY,1, NUM_FREE_NODES
+
+*DO,K,1,NUM_FREE_NODES
+U_STAR(1,K) = 1- (U_REAL/L_NODES_1C(2,K))
+*ENDDO
+
+STATUS, U_STAR 
+
+SAVE			! SAVES DATABASE TO JOBNAME.DB
+
+!--------------- PLOTTING --------------- (SAVED TILL HERE)
+
+/POST1
+SET,LAST
+/GRAPHICS,FULL
+
+*DO,I,1,NUM_FREE_NODES
+DNSOL,FREE_NODES_LIST(I),U,X,U_STAR(1,I)
+*ENDDO
+
+*DO,I,1,NUM_LOAD_NODES
+DNSOL,LOAD_NODES_LIST(I),U,X,1
+*ENDDO
+
+*DO,I,1,NUM_FIX_NODES
+DNSOL,FIX_NODES_LIST(I),U,X,0
+*ENDDO
+RAPPND,NUM_FREE_NODES+1,NUM_FREE_NODES+1
+
+PLNSOL,U,X,0,2
+
+
+! format output for nodes, elements and stress listings
+/PAGE, 1E9,, 1E9,,  ! disable headers
+/FORMAT, , ,14,5, , ! fix floating point format
+/HEADER, off, off, off, off, on, off ! disable summaries
+
+
+
+!-------------- DATA PROCESSING ------------------ (MODIFY)
+
+/POST26
+/OUTPUT,NLIST,txt
+NLIST,,,,COORD		! print nodes w. coordinates
+/OUTPUT
+
+/OUTPUT,ELIST,txt
+ELIST				! print element connectivity table
+/OUTPUT
+
+
+/POST1
+/OUTPUT,DISP,txt
+PRNSOL,U			! print all displacements
+/OUTPUT
+
+!-------------------------------------------------------------------------CHANGED-----------------------------------------------------------------------------
+
+*DIM,TABLE_RES,ARRAY,NUM_TOT_NODES,2
+
+! assign node numbers
+*DO,I,1,NUM_TOT_NODES
+	*SET,TABLE_RES(I,1),I
+*ENDDO
+
+! assign U* values for free nodes
+*DO,I,1,NUM_FREE_NODES
+	*SET,TABLE_RES(FREE_NODES_LIST(I),2),U_STAR(1,I)
+*ENDDO
+
+! assign U*=1 for load nodes
+*DO,I,1,NUM_LOAD_NODES
+	*SET,TABLE_RES(LOAD_NODES_LIST(I),2),1
+*ENDDO
+
+! assign U*=0 for fixed nodes
+*DO,I,1,NUM_FIX_NODES
+	*SET,TABLE_RES(FIX_NODES_LIST(I),2),0
+*ENDDO
+
+!-------------------------------------------------------------------------CHANGED-----------------------------------------------------------------------------
+
+
+ALLSEL
+*GET,ELEM_NO_MIN,ELEM,0,NUM,MIN
+*GET,ELEM_NO_MAX,ELEM,0,NUM,MAX
+*GET,ELEM_COUNT,ELEM,0,COUNT
+
+
+
+!NODES_PER_ELEMENT = 4
+!ALLSEL
+!*GET,ELEM_NO_MIN,ELEM,0,NUM,MIN
+!*GET,ELEM_NO_MAX,ELEM,0,NUM,MAX
+!*GET,ELEM_COUNT,ELEM,0,COUNT
+	
+!*DIM,ELEMENT_TABLE,ARRAY,ELEM_COUNT,1+NODES_PER_ELEMENT ! 20 NODES
+!*DO,I,ELEM_NO_MIN,ELEM_NO_MAX
+!	*SET,ELEMENT_TABLE(I,1),I
+!	*DO,J,1,NODES_PER_ELEMENT 
+!		*SET,ELEMENT_TABLE(I,J+1),NELEM(I,J)
+!	*ENDDO
+!*ENDDO
+
+*cfopen,element_type.txt
+
+! list element types
+*GET,net,ETYP,1,NUM,COUNT
+*DO,i,1,net
+	*GET,ETname,ETYP,i,ATTR,ENAM
+*VWRITE,'ET ',i,' ',ETname
+(A3, F4.0, A1, F4.0)
+*ENDDO
+*cfclose
+
+!*MWRITE,ELEMENT_TABLE,ELEMENT_CONNECTIVITY,txt
+!(F5.0,F5.0,F5.0,F5.0,F5.0)
+
+*MWRITE,TABLE_RES,U_STAR,txt
+(F5.0,F10.6)
