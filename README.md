@@ -4,6 +4,8 @@ This depository contains the scripts and supporting files developed as part of m
 ## Background
 The pursuit of lightweight and cost-effective components, without compromising the strength and safety, has always been a challenge for engineers. This is true especially in the Aerospace industry. It is crucial to identify how the loads imposed on the structure are transferred from the point of application to the support. The conventional stress-based methods are often prone to incorrect prediction of load paths due to the presence of stress concentrations, which is often the case with complex structures. In order to circumvent this problem, the present work aims to implement the concept of U*, a stiffness based index, for the identification of load paths.
 
+## Description of input files and scripts
+
 The description for the Mechanical APDL input files, MATLAB and Python scripts are provided below in this table. Sample mesh files for a simple plate with hole structure are also provided to run the input files.
 
 | Sl.No. |     FileName     |  Language | Description |
@@ -20,3 +22,6 @@ The description for the Mechanical APDL input files, MATLAB and Python scripts a
 | 10 | uniformityPlots.py   |   Python  |   Uniformity & Continuity plots that can be used as metric for structural optimization |
 
 Please note that all the files only work with 2D elements. The code will be updated in the future.
+
+## Slides
+The methodologies, results and plots are presented in the PDF document titled 'Load_Path_Visualization_Github'.
