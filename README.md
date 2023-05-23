@@ -17,5 +17,6 @@ The description for the Mechanical APDL input files, MATLAB and Python scripts a
 | 7 | PWH_MDL_4npe_478.cdb  |    APDL   |   Mesh file for Multiple Interface Distributed Loading case. To be used for U_str_MDL_Inspect.inp|
 | 8 | create_vtk.m          |   MATLAB  |   Uses APDL mesh data & U* data to generate VTK file for postprocessing in Paraview   |
 | 9 | Paraview_automate.py  |   Python  |   Macro in Paraview that generates desired series of streamlines, Extracts and writes data for individual streamlines into separate CSV files, Finds the longest streamline |
+| 10 | uniformityPlots.py   |   Python  |   Uniformity & Continuity plots that can be used as metric for structural optimization |
 
 Please note that all the files only work with 2D elements. The code will be updated in the future.
